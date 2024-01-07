@@ -1,0 +1,9 @@
+[package]
+edition = "2021"
+name = "image-server"
+version = "0.1.0"
+
+[dependencies]
+actix = "0.13.1"
+actix-web = "4.4.1"
+actix-web-actors = "4.2.0"
