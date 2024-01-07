@@ -1,38 +1,50 @@
-use actix::{Actor, StreamHandler};
-use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
+
+use actix::{Actor, Addr};
+use actix_web::middleware::Logger;
+use actix_web::web;
+use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
-struct Websocket;
+mod server;
+mod session;
 
-impl Actor for Websocket {
-    type Context = ws::WebsocketContext<Self>;
-}
+use server::ImageServer;
+use session::WebsocketImageSession;
 
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for Websocket {
-    fn handle(&mut self, item: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        match item {
-            Ok(message) => match message {
-                ws::Message::Ping(msg) => ctx.pong(&msg),
-                ws::Message::Text(text) => ctx.text(text),
-                ws::Message::Binary(binary) => ctx.binary(binary),
-                message => println!("Unhandled message: {message:?}"),
-            },
-            Err(e) => println!("Error: {e:?}"),
-        }
-    }
-}
-
-async fn index(request: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
-    let response = ws::start(Websocket {}, &request, stream);
+async fn image_route(
+    request: HttpRequest,
+    stream: web::Payload,
+    server: web::Data<Addr<ImageServer>>,
+) -> Result<HttpResponse, Error> {
+    let session = WebsocketImageSession::new(0, server.get_ref().clone());
+    let response = ws::start(session, &request, stream);
     println!("Response: {:?}", response);
     response
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("Starting...");
-    HttpServer::new(|| App::new().route("/ws/", web::get().to(index)))
-        .bind(("127.0.0.1", 8080))?
-        .run()
-        .await
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
+    // Initialize application state.
+    let app_state = Arc::new(AtomicUsize::new(0));
+
+    // Start image server actor.
+    let server = ImageServer::new(app_state.clone()).start();
+
+    log::info!("Starting HTTP server at http://localhost:8080");
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::from(app_state.clone()))
+            .app_data(web::Data::new(server.clone()))
+            .route("/ws", web::get().to(image_route))
+            .wrap(Logger::default())
+    })
+    .workers(2)
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
 }
