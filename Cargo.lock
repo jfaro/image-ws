@@ -639,15 +639,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "image-server"
-version = "0.1.0"
-dependencies = [
- "actix",
- "actix-web",
- "actix-web-actors",
-]
-
-[[package]]
 name = "indexmap"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -990,6 +981,15 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "actix-web",
+ "actix-web-actors",
 ]
 
 [[package]]
