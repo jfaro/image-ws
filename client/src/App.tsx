@@ -1,7 +1,7 @@
 import './App.css'
 import { useEffect, useRef } from 'react';
 
-const URL = "ws://127.0.0.1:8080"
+const URL = "ws://127.0.0.1:8080/ws"
 
 function App() {
   const connection = useRef<WebSocket | null>(null);
