@@ -1,50 +1,36 @@
 use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
 
 use actix::{Actor, Context, Handler, Recipient};
-use rand::rngs::ThreadRng;
-use rand::Rng;
+use log::info;
+use uuid::Uuid;
 
-#[derive(actix::Message)]
-#[rtype(result = "()")]
-pub struct Message(pub String);
+use crate::messages::{Connect, Disconnect, WebsocketMessage};
 
-/// New session created.
-#[derive(actix::Message)]
-#[rtype(result = "usize")]
-pub struct Connect {
-    pub address: Recipient<Message>,
-}
-
-/// Session is disconnected.
-#[derive(actix::Message)]
-#[rtype(result = "()")]
-pub struct Disconnect {
-    pub id: usize,
-}
+type Socket = Recipient<WebsocketMessage>;
 
 /// Manage client sessions.
 #[derive(Debug)]
 pub struct ImageServer {
-    sessions: HashMap<usize, Recipient<Message>>,
-    rng: ThreadRng,
+    /// Map client IDs to the client connection.
+    sessions: HashMap<Uuid, Socket>,
 }
 
-impl ImageServer {
-    pub fn new(_: Arc<AtomicUsize>) -> Self {
+impl Default for ImageServer {
+    fn default() -> Self {
         Self {
             sessions: HashMap::new(),
-            rng: rand::thread_rng(),
         }
     }
 }
 
 impl ImageServer {
+    /// Sends message to all clients.
     fn send_message(&self, message: &str) {
         for (id, recipient) in &self.sessions {
-            println!("Sending to {}: {}", id, message);
-            recipient.do_send(Message(message.to_owned()))
+            info!("Sending to {}: {}", id, message);
+            recipient.do_send(WebsocketMessage {
+                content: message.to_owned(),
+            })
         }
     }
 }
@@ -56,13 +42,12 @@ impl Actor for ImageServer {
 
 /// Handler for connect message.
 impl Handler<Connect> for ImageServer {
-    type Result = usize;
+    type Result = ();
 
     fn handle(&mut self, msg: Connect, _: &mut Self::Context) -> Self::Result {
-        let id = self.rng.gen::<usize>();
-        println!("Client joined: {}", id);
-        self.sessions.insert(id, msg.address);
-        id
+        log::info!("Client joined: {}", msg.id);
+        self.sessions.insert(msg.id, msg.address);
+        self.send_message(&format!("your id is {}", msg.id));
     }
 }
 
@@ -71,7 +56,7 @@ impl Handler<Disconnect> for ImageServer {
     type Result = ();
 
     fn handle(&mut self, msg: Disconnect, _: &mut Self::Context) -> Self::Result {
-        println!("Client disconnected: {}", msg.id);
+        info!("Client disconnected: {}", msg.id);
         self.sessions.remove(&msg.id);
     }
 }
