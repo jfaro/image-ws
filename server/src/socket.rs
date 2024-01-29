@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use actix::{Actor, ActorContext, AsyncContext, Handler, Running, SpawnHandle, StreamHandler};
+use actix::{Actor, ActorContext, AsyncContext, Running, SpawnHandle, StreamHandler};
 use actix_web_actors::ws;
 use log::info;
 use uuid::Uuid;
@@ -49,8 +49,8 @@ impl Actor for WebsocketConnection {
         let mut rx = self.state.rx.clone();
         self.handle = Some(ctx.add_stream(async_stream::stream! {
             while rx.changed().await.is_ok() {
-                let value = rx.borrow().to_string();
-                log::info!("new stream value: {:?}", value);
+                let value = rx.borrow().clone();
+                log::info!("new stream value");
                 yield value
             };
         }));
@@ -62,10 +62,12 @@ impl Actor for WebsocketConnection {
     }
 }
 
-impl StreamHandler<String> for WebsocketConnection {
-    fn handle(&mut self, msg: String, ctx: &mut Self::Context) {
-        log::info!("handling stream value: {msg:?}");
-        ctx.text(msg);
+impl StreamHandler<Option<Vec<u8>>> for WebsocketConnection {
+    fn handle(&mut self, msg: Option<Vec<u8>>, ctx: &mut Self::Context) {
+        if let Some(bytes) = msg {
+            log::info!("handling stream value");
+            ctx.binary(bytes)
+        }
     }
 }
 

@@ -27,13 +27,13 @@ async fn ws_connection(request: HttpRequest, stream: web::Payload) -> Result<Htt
 
 #[derive(Clone)]
 struct State {
-    tx: Arc<watch::Sender<String>>,
-    rx: watch::Receiver<String>,
+    tx: Arc<watch::Sender<Option<Vec<u8>>>>,
+    rx: watch::Receiver<Option<Vec<u8>>>,
 }
 
 impl State {
     pub fn new() -> Self {
-        let (tx, rx) = watch::channel(String::new());
+        let (tx, rx) = watch::channel(None);
         Self {
             tx: Arc::new(tx),
             rx,
@@ -66,7 +66,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 async fn send_updates(state: State) {
-    let mut interval = interval(Duration::from_secs(5));
+    let mut interval = interval(Duration::from_millis(50));
     let tx = state.tx.clone();
 
     let paths = fs::read_dir("./images").expect("images directory missing");
@@ -75,14 +75,22 @@ async fn send_updates(state: State) {
         .into_iter()
         .filter_map(|p| p.ok().map(|p| p.path()))
         .collect();
-
     paths.sort();
 
+    let images: Vec<(&PathBuf, Vec<u8>)> = paths
+        .iter()
+        .map(|p| {
+            let bytes = fs::read(p).expect("fail to load image from file");
+            (p, bytes)
+        })
+        .collect();
+
     loop {
-        for p in &paths {
+        for (p, bytes) in &images {
             let name = format!("{}", p.display());
             info!("Sending {}", name);
-            tx.send(name).expect("fail to send on watch channel");
+            tx.send(Some(bytes.clone()))
+                .expect("fail to send on watch channel");
             interval.tick().await;
         }
     }
