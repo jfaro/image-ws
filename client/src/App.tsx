@@ -23,7 +23,7 @@ const useSocket = () => {
 
   // Handle socket close.
   const onClose = useCallback(() => {
-    console.log("Connection closed")
+    console.warn("Connection closed")
     setStatus(Status.Closed);
     ws.current = undefined
   }, [])
@@ -35,7 +35,7 @@ const useSocket = () => {
 
   // Create new web socket and register event handlers.
   const initSocket = useCallback(() => {
-    console.log(`Creating connection at ${SOCKET_URL}`)
+    console.log(`Creating connection at ${SOCKET_URL}`);
     const socket = new WebSocket(SOCKET_URL);
     socket.addEventListener("open", onOpen);
     socket.addEventListener("close", onClose);
@@ -47,7 +47,7 @@ const useSocket = () => {
     let interval = setInterval(() => {
       // Clear closed connection.
       if (ws.current && ws.current.readyState === ws.current.CLOSED) {
-        console.log("Removing closed connection")
+        console.warn("Removing closed connection")
         ws.current = undefined;
       }
 
