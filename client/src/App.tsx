@@ -13,7 +13,8 @@ enum Status {
 const useSocket = () => {
   const ws = useRef<WebSocket>();
   const [status, setStatus] = useState(Status.Closed)
-  const [message, setMessage] = useState("");
+  const [url, setUrl] = useState<string>();
+
 
   // Handle socket open.
   const onOpen = useCallback(() => {
@@ -28,10 +29,18 @@ const useSocket = () => {
     ws.current = undefined
   }, [])
 
+  // Create PNG blob from bytes received.
+  const handleImageBlob = async (blob: Blob) => {
+    const buffer = await blob.arrayBuffer();
+    const pngBlob = new Blob([buffer], { type: "image/png" });
+    const url = URL.createObjectURL(pngBlob)
+    setUrl(url)
+  }
+
   // Handle socket message.
   const onMessage = (event: MessageEvent<any>) => {
-    console.log("Message received on socket", event.data)
-    setMessage(event.data)
+    console.debug("Message received on socket", event)
+    handleImageBlob(event.data)
   };
 
   // Create new web socket and register event handlers.
@@ -67,13 +76,13 @@ const useSocket = () => {
       ws.current?.removeEventListener("close", onClose)
       ws.current?.removeEventListener("message", onMessage)
     }
-  })
+  }, [])
 
-  return { status, message }
+  return { status, url }
 }
 
 function App() {
-  const { status, message } = useSocket();
+  const { status, url } = useSocket();
 
   return (
     <>
@@ -81,9 +90,7 @@ function App() {
         <div>
           Connection: {status}
         </div>
-        <div>
-          Message: {message}
-        </div>
+        <img src={url} width={200} />
       </div>
     </>
   )
