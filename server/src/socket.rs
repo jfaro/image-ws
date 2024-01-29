@@ -1,12 +1,11 @@
 use std::time::{Duration, Instant};
 
-use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, Running, StreamHandler};
+use actix::{Actor, ActorContext, AsyncContext, Handler, Running, SpawnHandle, StreamHandler};
 use actix_web_actors::ws;
 use log::info;
 use uuid::Uuid;
 
-use crate::messages::{Disconnect, WebsocketMessage};
-use crate::server::ImageServer;
+use crate::State;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -14,31 +13,22 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct WebsocketConnection {
     /// Unique session identifier.
     pub id: Uuid,
-    /// Image server address.
-    pub address: Addr<ImageServer>,
     /// Last client heartbeat.
-    pub last_heartbeat: Instant,
+    pub heartbeat: Instant,
+    /// Application state.
+    pub state: State,
+    /// Receiver task handle.
+    pub handle: Option<SpawnHandle>,
 }
 
 impl WebsocketConnection {
-    pub fn new(address: Addr<ImageServer>) -> Self {
+    pub fn new(state: State) -> Self {
         Self {
             id: Uuid::new_v4(),
-            address,
-            last_heartbeat: Instant::now(),
+            heartbeat: Instant::now(),
+            state,
+            handle: None,
         }
-    }
-
-    fn heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
-        ctx.run_interval(HEARTBEAT_INTERVAL, |conn, ctx| {
-            if Instant::now().duration_since(conn.last_heartbeat) > CLIENT_TIMEOUT {
-                info!("Websocket client heartbeat failed, disconnecting!");
-                ctx.stop();
-                return;
-            }
-
-            ctx.ping(b"PING")
-        });
     }
 }
 
@@ -47,13 +37,33 @@ impl Actor for WebsocketConnection {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("WebSocket connection starting for {:?}", self.id);
-        self.heartbeat(ctx);
+        ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
+            if Instant::now().duration_since(act.heartbeat) > CLIENT_TIMEOUT {
+                info!("Websocket client heartbeat failed, disconnecting!");
+                ctx.stop();
+                return;
+            }
+            ctx.ping(b"")
+        });
+
+        let mut rx = self.state.rx.clone();
+        self.handle = Some(ctx.add_stream(async_stream::stream! {
+            while rx.changed().await.is_ok() {
+                log::info!("new stream value");
+                yield rx.borrow().to_string()
+            };
+        }));
     }
 
     fn stopping(&mut self, _ctx: &mut Self::Context) -> actix::prelude::Running {
         info!("WebSocket connection stopping for {:?}", self.id);
-        self.address.do_send(Disconnect { id: self.id });
         Running::Stop
+    }
+}
+
+impl StreamHandler<String> for WebsocketConnection {
+    fn handle(&mut self, msg: String, ctx: &mut Self::Context) {
+        ctx.text(msg);
     }
 }
 
@@ -63,12 +73,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebsocketConnecti
             Ok(message) => match message {
                 ws::Message::Ping(msg) => {
                     info!("Received ping!");
-                    self.last_heartbeat = Instant::now();
+                    self.heartbeat = Instant::now();
                     ctx.pong(&msg)
                 }
                 ws::Message::Pong(_) => {
                     info!("Received pong!");
-                    self.last_heartbeat = Instant::now();
+                    self.heartbeat = Instant::now();
                 }
                 ws::Message::Text(text) => {
                     info!("Received text: {text}");
@@ -91,13 +101,5 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebsocketConnecti
             },
             Err(e) => panic!("{}", e), // TODO: Handle errors.
         }
-    }
-}
-
-impl Handler<WebsocketMessage> for WebsocketConnection {
-    type Result = ();
-
-    fn handle(&mut self, msg: WebsocketMessage, ctx: &mut Self::Context) -> Self::Result {
-        ctx.text(msg.content)
     }
 }
