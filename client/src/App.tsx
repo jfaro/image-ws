@@ -13,6 +13,7 @@ enum Status {
 const useSocket = () => {
   const ws = useRef<WebSocket>();
   const [status, setStatus] = useState(Status.Closed)
+  const [message, setMessage] = useState("");
 
   // Handle socket open.
   const onOpen = useCallback(() => {
@@ -28,9 +29,10 @@ const useSocket = () => {
   }, [])
 
   // Handle socket message.
-  const onMessage = useCallback((event: MessageEvent<any>) => {
+  const onMessage = (event: MessageEvent<any>) => {
     console.log("Message received on socket", event.data)
-  }, []);
+    setMessage(event.data)
+  };
 
   // Create new web socket and register event handlers.
   const initSocket = useCallback(() => {
@@ -39,6 +41,9 @@ const useSocket = () => {
     socket.addEventListener("open", onOpen);
     socket.addEventListener("close", onClose);
     socket.addEventListener("message", onMessage)
+    socket.addEventListener("error", (error) => {
+      console.error("Error:", error)
+    })
     ws.current = socket;
   }, []);
 
@@ -64,16 +69,21 @@ const useSocket = () => {
     }
   })
 
-  return { status }
+  return { status, message }
 }
 
 function App() {
-  const { status } = useSocket();
+  const { status, message } = useSocket();
 
   return (
     <>
       <div>
-        Connection: {status}
+        <div>
+          Connection: {status}
+        </div>
+        <div>
+          Message: {message}
+        </div>
       </div>
     </>
   )

@@ -1,5 +1,10 @@
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
+use actix::clock::{interval, Interval};
+use actix::spawn;
 use actix_web::middleware::Logger;
 use actix_web::web;
 use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer};
@@ -43,6 +48,10 @@ async fn main() -> std::io::Result<()> {
     // Start image server actor.
     let state = State::new();
 
+    // Start update task.
+    spawn(send_updates(state.clone()));
+
+    // Start server.
     info!("Starting HTTP server at http://localhost:8080");
     HttpServer::new(move || {
         App::new()
@@ -56,6 +65,25 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-async fn send_images() {
-    info!("Sending image")
+async fn send_updates(state: State) {
+    let mut interval = interval(Duration::from_secs(5));
+    let tx = state.tx.clone();
+
+    let paths = fs::read_dir("./images").expect("images directory missing");
+
+    let mut paths: Vec<PathBuf> = paths
+        .into_iter()
+        .filter_map(|p| p.ok().map(|p| p.path()))
+        .collect();
+
+    paths.sort();
+
+    loop {
+        for p in &paths {
+            let name = format!("{}", p.display());
+            info!("Sending {}", name);
+            tx.send(name).expect("fail to send on watch channel");
+            interval.tick().await;
+        }
+    }
 }
