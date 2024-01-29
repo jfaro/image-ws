@@ -12,7 +12,6 @@ enum Status {
 
 const useSocket = () => {
   const ws = useRef<WebSocket>();
-  // const [ws, setWs] = useState<WebSocket>();
   const [status, setStatus] = useState(Status.Closed)
 
   // Handle socket open.
@@ -59,7 +58,7 @@ const useSocket = () => {
 
     return () => {
       clearInterval(interval)
-      ws.current?.removeEventListener("open", (_) => onOpen())
+      ws.current?.removeEventListener("open", onOpen)
       ws.current?.removeEventListener("close", onClose)
       ws.current?.removeEventListener("message", onMessage)
     }
