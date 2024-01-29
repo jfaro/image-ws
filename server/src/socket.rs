@@ -50,7 +50,6 @@ impl Actor for WebsocketConnection {
         self.handle = Some(ctx.add_stream(async_stream::stream! {
             while rx.changed().await.is_ok() {
                 let value = rx.borrow().clone();
-                log::info!("new stream value");
                 yield value
             };
         }));
@@ -65,7 +64,6 @@ impl Actor for WebsocketConnection {
 impl StreamHandler<Option<Vec<u8>>> for WebsocketConnection {
     fn handle(&mut self, msg: Option<Vec<u8>>, ctx: &mut Self::Context) {
         if let Some(bytes) = msg {
-            log::info!("handling stream value");
             ctx.binary(bytes)
         }
     }

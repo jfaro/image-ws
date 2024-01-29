@@ -86,9 +86,7 @@ async fn send_updates(state: State) {
         .collect();
 
     loop {
-        for (p, bytes) in &images {
-            let name = format!("{}", p.display());
-            info!("Sending {}", name);
+        for (_, bytes) in &images {
             tx.send(Some(bytes.clone()))
                 .expect("fail to send on watch channel");
             interval.tick().await;
